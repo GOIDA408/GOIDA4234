@@ -39,7 +39,7 @@ CONFIG = {
     "string_session": "",
     "channels": [
         "@cvedc_vpn",
-        "@freeinternet_byMylgalaru",
+        "@freeinternet_byMygalaru",
     ],
     "message_limit": 800,                 # сообщений с каждого канала
     "output": "tg_vless.txt",             # файл с vless://
@@ -130,48 +130,13 @@ def extract_vless(blob: str) -> list[str]:
 
 
 async def fetch_messages(channels: list[str], limit: int) -> str:
-    from telethon import TelegramClient
-    from telethon.sessions import StringSession
+    from tg_common import fetch_telegram_blob
 
-    api_id = cfg("api_id")
-    api_hash = (cfg("api_hash") or "").strip()
-    session_str = (cfg("string_session") or "").strip()
-
-    if not api_id or not api_hash:
-        print_msg("[error] заполни CONFIG api_id / api_hash в начале parse_tg.py")
+    if not cfg("api_id") or not cfg("api_hash"):
+        print_msg("[error] заполни CONFIG api_id / api_hash")
         sys.exit(1)
 
-    if session_str:
-        client = TelegramClient(StringSession(session_str), api_id, api_hash)
-    else:
-        session_path = os.environ.get("TG_SESSION_PATH", str(BASE_DIR / "tg_session"))
-        client = TelegramClient(session_path, api_id, api_hash)
-
-    parts: list[str] = []
-    await client.connect()
-    try:
-        if not await client.is_user_authorized():
-            print_msg("[error] не авторизован")
-            sys.exit(1)
-
-        for raw_ch in channels:
-            ch = normalize_channel(raw_ch)
-            try:
-                entity = await client.get_entity(ch)
-            except Exception as exc:
-                print_msg(f"[warn] {ch}: {exc}")
-                continue
-            n = 0
-            async for msg in client.iter_messages(entity, limit=limit):
-                n += 1
-                text = msg.text or msg.message or getattr(msg, "raw_text", None)
-                if text:
-                    parts.append(text)
-            print_msg(f"[info] {ch}: {n} messages")
-    finally:
-        await client.disconnect()
-
-    return "\n".join(parts)
+    return await fetch_telegram_blob(channels, limit, log_fn=print_msg)
 
 
 def save_session_to_config(session: str) -> None:
@@ -301,6 +266,12 @@ def main() -> int:
         do_login(args.phone)
         return 0
 
+    from tg_common import sync_tg_sources
+
+    synced = sync_tg_sources()
+    if synced:
+        print_msg(f"[info] tg_sources.txt: {len(synced)} channel(s)")
+
     asyncio.run(ensure_authorized(args.phone))
 
     channels = load_channels(args.channels)
@@ -322,20 +293,11 @@ def main() -> int:
     print_msg(f"[ok] saved → {args.output}")
 
     if args.append_sources:
-        sources_path = BASE_DIR / "sources.txt"
-        existing = set()
-        if sources_path.is_file():
-            for line in sources_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    existing.add(line)
-        new_lines = [ln for ln in links if ln not in existing]
-        if new_lines:
-            with sources_path.open("a", encoding="utf-8") as f:
-                f.write("\n")
-                for ln in new_lines:
-                    f.write(ln + "\n")
-            print_msg(f"[ok] +{len(new_lines)} links appended to sources.txt")
+        from tg_common import append_vless_to_sources
+
+        n = append_vless_to_sources(links)
+        if n:
+            print_msg(f"[ok] +{n} links appended to sources.txt")
 
     return 0
 
