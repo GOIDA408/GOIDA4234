@@ -110,9 +110,12 @@ def clean_link(raw: str) -> str:
 
 
 def extract_vless(blob: str) -> list[str]:
-    found = VLESS_RE.findall(blob)
+    from sub_decode import unwrap_subscription
+
+    text = unwrap_subscription(blob)
+    found = VLESS_RE.findall(text)
     try:
-        found.extend(VLESS_RE.findall(b64_decode(blob)))
+        found.extend(VLESS_RE.findall(b64_decode(text)))
     except (ValueError, binascii.Error):
         pass
     seen: set[str] = set()
