@@ -319,7 +319,10 @@ async def fetch_url(session: aiohttp.ClientSession, url: str) -> str:
             headers={"User-Agent": "Mozilla/5.0 Chrome/120.0.0.0 Safari/537.36"},
         ) as resp:
             if resp.status == 200:
-                return await resp.text()
+                from sub_decode import unwrap_subscription
+
+                raw = await resp.text()
+                return unwrap_subscription(raw)
     except Exception:
         pass
     return ""
@@ -399,8 +402,13 @@ def decode_base64_blob(blob: str) -> str:
 
 
 def extract_links(text: str) -> list[str]:
-    links = set(VLESS_RE.findall(text))
-    decoded = decode_base64_blob(text)
+    from sub_decode import unwrap_subscription
+
+    blob = unwrap_subscription(text)
+    links = set(VLESS_RE.findall(blob))
+    # на случай vless внутри необработанных кусков исходника
+    links.update(VLESS_RE.findall(text))
+    decoded = decode_base64_blob(blob)
     if decoded:
         links.update(VLESS_RE.findall(decoded))
 
