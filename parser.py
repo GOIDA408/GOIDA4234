@@ -1,9 +1,8 @@
 ﻿#!/usr/bin/env python3
 """
 VLESS parser + batch Xray checker.
-- Источники из sources.txt
+- Источники: sources.txt + Telegram (tg_sources.txt, Telethon)
 - Whitelist (RU SNI) + Global — проверка через Xray batch
-- Публикация: whitelist (100) + global (50), ping ≤600 ms
 """
 from __future__ import annotations
 
@@ -338,6 +337,44 @@ async def fetch_all(urls: list[str]) -> list[str]:
             if idx % 50 == 0 or idx == len(tasks):
                 log("info", f"fetched {idx}/{len(urls)} sources")
     return results
+
+
+async def fetch_telegram_text() -> str:
+    try:
+        from tg_common import fetch_telegram_blob, get_tg_credentials, load_tg_channels
+    except ImportError:
+        log("warn", "telegram: tg_common not found")
+        return ""
+
+    api_id, api_hash, session = get_tg_credentials()
+    if not api_id or not api_hash:
+        log("info", "telegram: skip (TG_API_ID / TG_API_HASH)")
+        return ""
+    if not session:
+        log("info", "telegram: skip (TG_STRING_SESSION)")
+        return ""
+
+    channels = load_tg_channels()
+    if not channels:
+        log("info", "telegram: skip (tg_sources.txt empty)")
+        return ""
+
+    try:
+        blob = await fetch_telegram_blob(channels)
+    except ImportError:
+        log("warn", "telegram: pip install telethon")
+        return ""
+    except Exception as exc:
+        log("warn", f"telegram: {exc}")
+        return ""
+
+    if not blob:
+        log("warn", "telegram: empty response")
+        return ""
+
+    n_links = len(extract_links(blob))
+    log("info", f"telegram: {n_links} vless from {len(channels)} channel(s)")
+    return blob
 
 
 # ---------------------------------------------------------------------------
@@ -847,12 +884,22 @@ async def run() -> int:
 
     urls = load_sources()
     if not urls:
-        log("error", "sources.txt empty")
-        return 1
-    log("info", f"source URLs: {len(urls)}")
+        log("warn", "sources.txt empty — only telegram")
+    else:
+        log("info", f"source URLs: {len(urls)}")
 
-    texts = await fetch_all(urls)
-    log("info", f"fetched texts: {len(texts)}")
+    texts: list[str] = []
+    if urls:
+        texts.extend(await fetch_all(urls))
+        log("info", f"http fetched: {len(texts)} blobs")
+
+    tg_blob = await fetch_telegram_text()
+    if tg_blob:
+        texts.append(tg_blob)
+
+    if not texts:
+        log("error", "no data from sources.txt or telegram")
+        return 1
 
     parsed = collect_nodes(texts)
     if not parsed:
