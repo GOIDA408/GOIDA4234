@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout subscription repo
+      - name: Checkout subscription repo (только подписки)
         uses: actions/checkout@v4
 
-      - name: Checkout private PARSER
+      - name: Checkout private PARSER (код парсера)
         uses: actions/checkout@v4
         with:
           repository: GOIDA408/PARSER
@@ -36,21 +36,44 @@ jobs:
         working-directory: parser-src
         env:
           PYTHONUNBUFFERED: "1"
+          NEEDED_WHITELIST: "100"
+          NEEDED_FOREIGN: "50"
+          XRAY_GROUP_SIZE: "1000"
+          REQUEST_CONCURRENCY: "150"
+          MAX_HTTP_MS: "600"
+          PREFERRED_MS: "600"
+          PROXY_TIMEOUT: "10"
+          PROBE_URL: "https://www.gstatic.com/generate_204"
+          WHITELIST_PROBE_URL: "http://www.rt.ru"
+          XRAY_MIN_SPLIT: "2"
+          XRAY_START_DELAY: "0.5"
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_STRING_SESSION: ${{ secrets.TG_STRING_SESSION }}
+          TG_CHANNELS: ${{ secrets.TG_CHANNELS }}
         run: python -u parser.py
 
-      - name: Publish to GOIDA4234
+      - name: Publish subscriptions
         run: |
-          cp parser-src/name.txt parser-src/whitelist.txt parser-src/foreign.txt parser-src/sub.txt parser-src/sub_raw.txt .
-          if [ ! -s name.txt ]; then
+          cp parser-src/name.txt parser-src/whitelist.txt parser-src/global.txt \
+            parser-src/foreign.txt parser-src/sub_name.txt parser-src/sub_name_raw.txt \
+            parser-src/sub_whitelist.txt parser-src/sub_whitelist_raw.txt \
+            parser-src/sub_global.txt parser-src/sub_global_raw.txt parser-src/sub.txt .
+          if [ ! -s whitelist.txt ] && [ ! -s global.txt ]; then
             echo "::error::No working VLESS servers found"
             exit 1
           fi
-          if grep -qi "security=none" name.txt; then
-            echo "::error::Invalid security=none links detected, aborting"
-            exit 1
-          fi
+          for f in whitelist.txt global.txt name.txt; do
+            if [ -s "$f" ] && grep -qi "security=none" "$f"; then
+              echo "::error::Invalid security=none in $f"
+              exit 1
+            fi
+          done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add name.txt whitelist.txt foreign.txt sub.txt sub_raw.txt
-          git diff --staged --quiet || git commit -m "Update VLESS subscriptions"
+          git add name.txt sub_name.txt sub_name_raw.txt \
+            whitelist.txt global.txt foreign.txt \
+            sub_whitelist.txt sub_whitelist_raw.txt \
+            sub_global.txt sub_global_raw.txt sub.txt
+          git diff --staged --quiet || git commit -m "Update subscriptions"
           git push
