@@ -5,4 +5,4 @@
 # Локально: CONFIG в parse_tg.py или env
 
 @cvedc_vpn
-@freeinternet_byMylgalaru
+@freeinternet_byMygalaru
