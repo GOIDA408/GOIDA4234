@@ -374,6 +374,14 @@ async def fetch_telegram_text() -> str:
 
     n_links = len(extract_links(blob))
     log("info", f"telegram: {n_links} vless from {len(channels)} channel(s)")
+
+    if os.getenv("TG_APPEND_SOURCES", "1").lower() in ("1", "true", "yes"):
+        from tg_common import append_vless_to_sources
+
+        added = append_vless_to_sources(extract_links(blob))
+        if added:
+            log("info", f"telegram: +{added} vless → sources.txt")
+
     return blob
 
 
@@ -880,6 +888,12 @@ def save_results(wl: list[VlessNode], gl: list[VlessNode]) -> bool:
 # ---------------------------------------------------------------------------
 
 async def run() -> int:
+    from tg_common import sync_tg_sources
+
+    synced = sync_tg_sources()
+    if synced:
+        log("info", f"telegram channels: {', '.join(synced)}")
+
     domains = load_ru_domains()
 
     urls = load_sources()
