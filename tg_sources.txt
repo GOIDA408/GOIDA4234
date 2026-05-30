@@ -1,0 +1,8 @@
+# Telegram-каналы для parser.py / parse_tg.py
+# @channel | https://t.me/channel
+#
+# CI secrets: TG_API_ID, TG_API_HASH, TG_STRING_SESSION
+# Локально: CONFIG в parse_tg.py или env
+
+@cvedc_vpn
+@freeinternet_byMylgalaru
