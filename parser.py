@@ -863,6 +863,19 @@ def save_results(wl: list[VlessNode], gl: list[VlessNode]) -> bool:
         log("error", "0 alive servers — subscriptions NOT updated")
         return False
 
+    # name.txt — все рабочие серверы (whitelist + global, без дублей)
+    name_links: list[str] = []
+    seen_uri: set[str] = set()
+    for link in wl_links + gl_links:
+        key = link.split("#", 1)[0]
+        if key in seen_uri:
+            continue
+        seen_uri.add(key)
+        name_links.append(link)
+
+    _write_lines(BASE_DIR / "name.txt", name_links)
+    _write_sub(BASE_DIR / "sub_name_raw.txt", BASE_DIR / "sub_name.txt", name_links)
+
     _write_lines(BASE_DIR / "whitelist.txt", wl_links)
     _write_sub(BASE_DIR / "sub_whitelist_raw.txt", BASE_DIR / "sub_whitelist.txt", wl_links)
 
@@ -877,7 +890,7 @@ def save_results(wl: list[VlessNode], gl: list[VlessNode]) -> bool:
 
     log(
         "done",
-        f"whitelist {len(wl_links)}/{NEEDED_WHITELIST} | "
+        f"name {len(name_links)} | whitelist {len(wl_links)}/{NEEDED_WHITELIST} | "
         f"global {len(gl_links)}/{NEEDED_FOREIGN} (ping<={PREFERRED_MS}ms)",
     )
     return True
