@@ -1,12 +1,13 @@
-"""Telegram fetch для parser.py и parse_tg.py."""
+"""Telegram: каналы, credentials, fetch — для parser.py и parse_tg.py."""
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
+from typing import Callable
 
 BASE_DIR = Path(__file__).resolve().parent
 TG_SOURCES = BASE_DIR / "tg_sources.txt"
+SOURCES_FILE = BASE_DIR / "sources.txt"
 
 
 def normalize_channel(channel: str) -> str:
@@ -20,10 +21,20 @@ def normalize_channel(channel: str) -> str:
     return ch
 
 
+def _config_channels() -> list[str]:
+    try:
+        import parse_tg as pt
+
+        return list(pt.cfg("channels") or [])
+    except Exception:
+        return []
+
+
 def load_tg_channels(extra: list[str] | None = None) -> list[str]:
     channels: list[str] = []
     if extra:
         channels.extend(extra)
+    channels.extend(_config_channels())
     raw = os.environ.get("TG_CHANNELS", "").strip()
     if raw:
         channels.extend(x.strip() for x in raw.split(",") if x.strip())
@@ -42,8 +53,23 @@ def load_tg_channels(extra: list[str] | None = None) -> list[str]:
     return uniq
 
 
+def sync_tg_sources() -> list[str]:
+    """CONFIG channels → tg_sources.txt (единый список)."""
+    channels = load_tg_channels()
+    if not channels:
+        return []
+
+    lines = [
+        "# Telegram-каналы (auto-sync из parse_tg CONFIG + env)",
+        "# parser.py и parse_tg.py читают этот файл",
+        "",
+    ]
+    lines.extend(channels)
+    TG_SOURCES.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return channels
+
+
 def get_tg_credentials() -> tuple[int, str, str]:
-    """env → parse_tg.CONFIG → пусто."""
     api_id = os.environ.get("TG_API_ID", "").strip()
     api_hash = os.environ.get("TG_API_HASH", "").strip()
     session = os.environ.get("TG_STRING_SESSION", "").strip()
@@ -68,9 +94,30 @@ def get_tg_credentials() -> tuple[int, str, str]:
     return aid, api_hash, session
 
 
+def append_vless_to_sources(links: list[str]) -> int:
+    """Добавить vless:// в sources.txt без дублей."""
+    if not links:
+        return 0
+    existing: set[str] = set()
+    if SOURCES_FILE.is_file():
+        for line in SOURCES_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                existing.add(line)
+    new_lines = [ln for ln in links if ln not in existing]
+    if not new_lines:
+        return 0
+    with SOURCES_FILE.open("a", encoding="utf-8") as f:
+        f.write("\n")
+        for ln in new_lines:
+            f.write(ln + "\n")
+    return len(new_lines)
+
+
 async def fetch_telegram_blob(
     channels: list[str] | None = None,
     limit: int | None = None,
+    log_fn: Callable[[str], None] | None = None,
 ) -> str:
     api_id, api_hash, session = get_tg_credentials()
     if not api_id or not api_hash or not session:
@@ -99,12 +146,18 @@ async def fetch_telegram_blob(
             ch = normalize_channel(raw_ch)
             try:
                 entity = await client.get_entity(ch)
-            except Exception:
+            except Exception as exc:
+                if log_fn:
+                    log_fn(f"[warn] {ch}: {exc}")
                 continue
+            n = 0
             async for msg in client.iter_messages(entity, limit=limit):
+                n += 1
                 text = msg.text or msg.message or getattr(msg, "raw_text", None)
                 if text:
                     parts.append(text)
+            if log_fn:
+                log_fn(f"[info] {ch}: {n} messages")
     finally:
         await client.disconnect()
 
